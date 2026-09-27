@@ -473,6 +473,8 @@ function nearestName(hexv){
  return best[0];
 }
 function spectrumAt(ev,commit=false){
+ // Si existe un color fijado, mover el ratón no puede modificarlo.
+ if(fixedColor && !commit) return;
  let rect=canvas.getBoundingClientRect(),x=Math.max(0,Math.min(rect.width,ev.clientX-rect.left)),y=Math.max(0,Math.min(rect.height,ev.clientY-rect.top));
  let px=Math.min(canvas.width-1,Math.round(x/rect.width*canvas.width)),py=Math.min(canvas.height-1,Math.round(y/rect.height*canvas.height));
  let data=ctx.getImageData(px,py,1,1).data,hexv=rgbHex(data[0],data[1],data[2]),name=nearestName(hexv);
@@ -481,13 +483,23 @@ function spectrumAt(ev,commit=false){
  selectedName.textContent=name;
  hex.textContent=hexv;
  rgbEl.textContent=`${data[0]}, ${data[1]}, ${data[2]}`;updateRgbChannels(data[0],data[1],data[2]);
- if(commit)selectAndCopy(name,hexv);
+ if(commit){
+   selectAndCopy(name,hexv);
+   setFixedState(name,hexv,x,y);
+ }
 }
 let dragging=false;
-canvas.addEventListener("pointerdown",e=>{dragging=true;canvas.setPointerCapture(e.pointerId);spectrumAt(e,true)});
-canvas.addEventListener("pointermove",e=>spectrumAt(e,dragging));
-canvas.addEventListener("pointerup",e=>{dragging=false;spectrumAt(e,true)});
-canvas.addEventListener("click",e=>spectrumAt(e,true));
+canvas.addEventListener("pointerdown",e=>{
+ // Un nuevo clic sustituye directamente el color fijado anterior.
+ fixedColor=false;
+ dragging=true;
+ try{canvas.setPointerCapture(e.pointerId)}catch(_){}
+ spectrumAt(e,true);
+});
+canvas.addEventListener("pointermove",e=>{
+ if(!fixedColor) spectrumAt(e,false);
+});
+canvas.addEventListener("pointerup",e=>{dragging=false});
 window.addEventListener("resize",drawSpectrum);
 requestAnimationFrame(drawSpectrum);
 function renderPalettes(){
@@ -562,27 +574,27 @@ document.querySelectorAll(".collapseHead").forEach(btn=>{
 render();select("Turquesa","#40E0D0");
 
 
-// Fijación del color del espectro, compatible con Firefox y Chromium
+// Fijación REAL del color del espectro, compatible con Firefox y Chromium
 let fixedColor = false;
-function setFixedState(){
+let fixedSpectrum = null;
+function setFixedState(name,hexv,x,y){
   fixedColor = true;
+  fixedSpectrum = {name,hexv,x,y};
   canvas.classList.add("locked");
   const btn=document.getElementById("clearFixedColor");
   if(btn) btn.style.display="inline-flex";
 }
 function clearFixedState(){
   fixedColor = false;
+  fixedSpectrum = null;
   canvas.classList.remove("locked");
   const btn=document.getElementById("clearFixedColor");
   if(btn) btn.style.display="none";
 }
 
-// Sustituimos los listeners anteriores por comportamiento de fijación sin APIs exclusivas.
-canvas.addEventListener("pointerleave",()=>{});
-canvas.addEventListener("click",()=>setFixedState());
-
 const clearFixedBtn=document.getElementById("clearFixedColor");
 if(clearFixedBtn) clearFixedBtn.addEventListener("click",(e)=>{
+  e.preventDefault();
   e.stopPropagation();
   clearFixedState();
   showToast("Fijación eliminada");
